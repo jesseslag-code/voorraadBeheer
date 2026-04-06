@@ -28,6 +28,9 @@ public class InventoryService {
      * @return Het gevonden Product, of null als het niet bestaat
      */
     public Product zoekProduct(String artikelNummer) {
+        if (artikelNummer == null) {
+            return null;
+        }
         for (Product product : producten) {
             if (product.getArtikelNummer().equalsIgnoreCase(artikelNummer)) {
                 return product;
