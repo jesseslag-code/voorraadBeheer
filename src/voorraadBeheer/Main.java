@@ -1,5 +1,8 @@
 package voorraadBeheer;
 
+import java.io.IOException;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Scanner;
 
@@ -8,48 +11,74 @@ import java.util.Scanner;
  * Alle bedrijfslogica wordt afgehandeld via {@link InventoryService}.
  */
 public class Main {
+
+    // ──────────────────────────────────────────────
+    //  Lay-out constanten
+    // ──────────────────────────────────────────────
+    private static final int BREEDTE = 82;
+    private static final String LIJN_H  = "═".repeat(BREEDTE);
+    private static final String LIJN_M  = "─".repeat(BREEDTE);
+    private static final String VERSIE  = "v2.0";
+
     private static final InventoryService service = new InventoryService();
     private static final Scanner scanner = new Scanner(System.in);
 
+    // ──────────────────────────────────────────────
+    //  Main
+    // ──────────────────────────────────────────────
+
     public static void main(String[] args) {
-        service.laadVoorbeeldData();
-        System.out.println("✓ Voorbeelddata geladen!\n");
+        toonSplashScreen();
+        service.laden();
+
+        List<Product> lageVoorraad = service.getProductenMetLageVoorraad();
+        if (!lageVoorraad.isEmpty()) {
+            toonMelding("WAARSCHUWING", lageVoorraad.size()
+                    + " product(en) hebben een te lage voorraad bij het opstarten!");
+        }
 
         boolean actief = true;
         while (actief) {
             toonMenu();
-            int keuze = scanner.nextInt();
-            scanner.nextLine(); // Buffer legen
+            int keuze = leesInt("Maak uw keuze (1-9): ");
 
+            System.out.println();
             switch (keuze) {
-                case 1:
-                    toonAlleProducten();
-                    break;
-                case 2:
-                    afboekenProduct();
-                    break;
-                case 3:
-                    toevoegenProduct();
-                    break;
-                case 4:
-                    productWijzigen();
-                    break;
-                case 5:
-                    verwijderProduct();
-                    break;
-                case 6:
-                    checkLageVoorraad();
-                    break;
-                case 7:
+                case 1: toonAlleProducten();   break;
+                case 2: zoekProduct();          break;
+                case 3: afboekenProduct();      break;
+                case 4: bijboekenProduct();     break;
+                case 5: toevoegenProduct();     break;
+                case 6: productWijzigen();      break;
+                case 7: verwijderProduct();     break;
+                case 8: checkLageVoorraad();    break;
+                case 9:
+                    opslaan();
+                    drukKader("Systeem afgesloten. Tot ziens!", true);
                     actief = false;
-                    System.out.println("Systeem afgesloten. Tot ziens!");
                     break;
                 default:
-                    System.out.println("Ongeldige keuze. Probeer opnieuw.");
+                    toonFout("Ongeldige keuze. Kies een optie tussen 1 en 9.");
             }
-            System.out.println();
+            if (actief) {
+                System.out.print("\nDruk op ENTER om door te gaan...");
+                scanner.nextLine();
+            }
         }
         scanner.close();
+    }
+
+    // ──────────────────────────────────────────────
+    //  Splash-scherm
+    // ──────────────────────────────────────────────
+
+    private static void toonSplashScreen() {
+        System.out.println();
+        System.out.println("╔" + LIJN_H + "╗");
+        drukCenteredRegel("VOORRAADBEHEER SYSTEEM  " + VERSIE, true);
+        drukCenteredRegel("Professioneel voorraad- en artikelbeheer", false);
+        System.out.println("╚" + LIJN_H + "╝");
+        System.out.println();
     }
 
     // ──────────────────────────────────────────────
@@ -57,15 +86,22 @@ public class Main {
     // ──────────────────────────────────────────────
 
     private static void toonMenu() {
-        System.out.println("=== VOORRAADBEHEER SYSTEEM ===");
-        System.out.println("1. Alle producten weergeven");
-        System.out.println("2. Product afboeken (voorraad verminderen)");
-        System.out.println("3. Nieuw product toevoegen");
-        System.out.println("4. Product wijzigen");
-        System.out.println("5. Product verwijderen");
-        System.out.println("6. Producten met lage voorraad controleren");
-        System.out.println("7. Systeem afsluiten");
-        System.out.print("Maak uw keuze (1-7): ");
+        String tijdstip = LocalDateTime.now().format(DateTimeFormatter.ofPattern("dd-MM-yyyy  HH:mm:ss"));
+        System.out.println();
+        System.out.println("╔" + LIJN_H + "╗");
+        drukCenteredRegel("HOOFDMENU", true);
+        drukCenteredRegel(tijdstip, false);
+        System.out.println("╠" + LIJN_H + "╣");
+        drukMenuOptie("1", "Alle producten weergeven");
+        drukMenuOptie("2", "Product zoeken");
+        drukMenuOptie("3", "Product afboeken  (voorraad verminderen)");
+        drukMenuOptie("4", "Product bijboeken  (voorraad aanvullen)");
+        drukMenuOptie("5", "Nieuw product toevoegen");
+        drukMenuOptie("6", "Product wijzigen");
+        drukMenuOptie("7", "Product verwijderen");
+        drukMenuOptie("8", "Producten met lage voorraad controleren");
+        drukMenuOptie("9", "Opslaan en afsluiten");
+        System.out.println("╚" + LIJN_H + "╝");
     }
 
     // ──────────────────────────────────────────────
@@ -74,223 +110,373 @@ public class Main {
 
     private static void toonAlleProducten() {
         List<Product> producten = service.getAlleProducten();
+        drukSchermTitel("PRODUCTOVERZICHT  (" + producten.size() + " artikel(en))");
+
         if (producten.isEmpty()) {
-            System.out.println("Geen producten in het systeem.");
+            toonMelding("INFO", "Geen producten in het systeem.");
             return;
         }
 
-        System.out.println("\n=== ALLE PRODUCTEN ===");
-        printTabelHeader();
-        for (Product product : producten) {
-            String status = product.isLageVoorraad() ? "⚠️ LAAG" : "✓ OK";
-            System.out.printf("%-15s %-20s %-12d %-12d %-10s%n",
-                    product.getArtikelNummer(),
-                    product.getNaam(),
-                    product.getVoorraad(),
-                    product.getMinimumVoorraad(),
-                    status);
+        toonProductTabelHeader();
+        for (Product p : producten) {
+            toonProductRegel(p);
         }
-        printLijn();
+        System.out.println("╠" + LIJN_H + "╣");
+        System.out.printf("║  %-76s  ║%n",
+                String.format("Totale voorraadwaarde:  € %,.2f", service.getTotaleVoorraadWaarde()));
+        System.out.println("╚" + LIJN_H + "╝");
     }
 
     // ──────────────────────────────────────────────
-    //  2. Afboeken
+    //  2. Zoeken
+    // ──────────────────────────────────────────────
+
+    private static void zoekProduct() {
+        drukSchermTitel("PRODUCT ZOEKEN");
+        System.out.print("  Zoekterm (naam of artikelnummer): ");
+        String zoekterm = scanner.nextLine().trim();
+
+        // Probeer eerst op artikelnummer
+        Product exactMatch = service.zoekProduct(zoekterm);
+        if (exactMatch != null) {
+            toonProductTabelHeader();
+            toonProductRegel(exactMatch);
+            System.out.println("╚" + LIJN_H + "╝");
+            return;
+        }
+
+        // Daarna op naam
+        List<Product> resultaten = service.zoekOpNaam(zoekterm);
+        if (resultaten.isEmpty()) {
+            toonFout("Geen producten gevonden voor: \"" + zoekterm + "\"");
+            return;
+        }
+        toonProductTabelHeader();
+        for (Product p : resultaten) {
+            toonProductRegel(p);
+        }
+        System.out.println("╚" + LIJN_H + "╝");
+    }
+
+    // ──────────────────────────────────────────────
+    //  3. Afboeken
     // ──────────────────────────────────────────────
 
     private static void afboekenProduct() {
-        System.out.print("Voer artikelnummer in: ");
+        drukSchermTitel("PRODUCT AFBOEKEN");
+        System.out.print("  Artikelnummer: ");
         String artikelNummer = scanner.nextLine().trim();
 
-        System.out.print("Voer aantal in om af te boeken: ");
-        int aantal = scanner.nextInt();
-        scanner.nextLine();
+        Product gevonden = service.zoekProduct(artikelNummer);
+        if (gevonden == null) {
+            toonFout("Artikel niet gevonden: " + artikelNummer);
+            return;
+        }
+        toonProductKaart(gevonden);
 
+        int aantal = leesInt("  Aantal af te boeken: ");
         try {
             Product product = service.boekAf(artikelNummer, aantal);
-            System.out.println("✓ Afboeking succesvol!");
-            System.out.println("  Product: " + product.getNaam());
-            System.out.println("  Afgeboekt: " + aantal + " stuks");
-            System.out.println("  Nieuwe voorraad: " + product.getVoorraad());
-
+            opslaan();
+            toonSucces("Afboeking verwerkt — nieuwe voorraad: " + product.getVoorraad() + " stuks");
             if (product.isLageVoorraad()) {
-                toonLageVoorraadMelding(product);
+                toonLageVoorraadWaarschuwing(product);
             }
         } catch (IllegalArgumentException e) {
-            System.out.println("❌ " + e.getMessage());
+            toonFout(e.getMessage());
         }
     }
 
     // ──────────────────────────────────────────────
-    //  3. Toevoegen
+    //  4. Bijboeken
+    // ──────────────────────────────────────────────
+
+    private static void bijboekenProduct() {
+        drukSchermTitel("PRODUCT BIJBOEKEN");
+        System.out.print("  Artikelnummer: ");
+        String artikelNummer = scanner.nextLine().trim();
+
+        Product gevonden = service.zoekProduct(artikelNummer);
+        if (gevonden == null) {
+            toonFout("Artikel niet gevonden: " + artikelNummer);
+            return;
+        }
+        toonProductKaart(gevonden);
+
+        int aantal = leesInt("  Aantal bij te boeken: ");
+        try {
+            Product product = service.boekBij(artikelNummer, aantal);
+            opslaan();
+            toonSucces("Bijboeking verwerkt — nieuwe voorraad: " + product.getVoorraad() + " stuks");
+        } catch (IllegalArgumentException e) {
+            toonFout(e.getMessage());
+        }
+    }
+
+    // ──────────────────────────────────────────────
+    //  5. Toevoegen
     // ──────────────────────────────────────────────
 
     private static void toevoegenProduct() {
-        System.out.print("Voer artikelnummer in: ");
+        drukSchermTitel("NIEUW PRODUCT TOEVOEGEN");
+        System.out.print("  Artikelnummer  : ");
         String artikelNummer = scanner.nextLine().trim();
 
-        System.out.print("Voer productnaam in: ");
+        System.out.print("  Productnaam    : ");
         String naam = scanner.nextLine().trim();
 
-        System.out.print("Voer voorraad in: ");
-        int voorraad = scanner.nextInt();
-
-        System.out.print("Voer minimum voorraad in: ");
-        int minimumVoorraad = scanner.nextInt();
-        scanner.nextLine();
+        int voorraad      = leesInt("  Huidige voorraad : ");
+        int minimum       = leesInt("  Minimum voorraad : ");
+        double prijs      = leesDouble("  Stukprijs (€)    : ");
 
         try {
-            Product product = new Product(naam, artikelNummer, voorraad, minimumVoorraad);
+            Product product = new Product(naam, artikelNummer, voorraad, minimum, prijs);
             if (service.voegProductToe(product)) {
-                System.out.println("✓ Product toegevoegd!");
+                opslaan();
+                toonSucces("Product \"" + naam + "\" toegevoegd aan het systeem.");
                 if (product.isLageVoorraad()) {
-                    toonLageVoorraadMelding(product);
+                    toonLageVoorraadWaarschuwing(product);
                 }
             } else {
-                System.out.println("❌ Dit artikelnummer bestaat al!");
+                toonFout("Artikelnummer \"" + artikelNummer + "\" bestaat al in het systeem.");
             }
         } catch (IllegalArgumentException e) {
-            System.out.println("❌ " + e.getMessage());
+            toonFout(e.getMessage());
         }
     }
 
     // ──────────────────────────────────────────────
-    //  4. Wijzigen
+    //  6. Wijzigen
     // ──────────────────────────────────────────────
 
     private static void productWijzigen() {
-        System.out.print("Voer artikelnummer in: ");
+        drukSchermTitel("PRODUCT WIJZIGEN");
+        System.out.print("  Artikelnummer: ");
         String artikelNummer = scanner.nextLine().trim();
 
         Product product = service.zoekProduct(artikelNummer);
         if (product == null) {
-            System.out.println("❌ Product niet gevonden!");
+            toonFout("Artikel niet gevonden: " + artikelNummer);
             return;
         }
+        toonProductKaart(product);
 
-        System.out.println("\n=== HUIDIGE GEGEVENS ===");
-        System.out.println("Naam: " + product.getNaam());
-        System.out.println("Voorraad: " + product.getVoorraad());
-        System.out.println("Minimum voorraad: " + product.getMinimumVoorraad());
-
-        System.out.println("\nWat wilt u wijzigen?");
-        System.out.println("1. Naam");
-        System.out.println("2. Voorraad");
-        System.out.println("3. Minimum voorraad");
-        System.out.print("Keuze (1-3): ");
-
-        int keuze = scanner.nextInt();
-        scanner.nextLine();
+        System.out.println("  Wat wilt u wijzigen?");
+        System.out.println("    [1] Naam");
+        System.out.println("    [2] Voorraad");
+        System.out.println("    [3] Minimum voorraad");
+        System.out.println("    [4] Stukprijs");
+        int keuze = leesInt("  Keuze (1-4): ");
 
         try {
             switch (keuze) {
                 case 1:
-                    System.out.print("Voer nieuwe naam in: ");
+                    System.out.print("  Nieuwe naam: ");
                     product.setNaam(scanner.nextLine().trim());
-                    System.out.println("✓ Naam gewijzigd!");
                     break;
                 case 2:
-                    System.out.print("Voer nieuwe voorraad in: ");
-                    product.setVoorraad(scanner.nextInt());
-                    scanner.nextLine();
-                    System.out.println("✓ Voorraad gewijzigd!");
+                    product.setVoorraad(leesInt("  Nieuwe voorraad: "));
                     break;
                 case 3:
-                    System.out.print("Voer nieuw minimum in: ");
-                    product.setMinimumVoorraad(scanner.nextInt());
-                    scanner.nextLine();
-                    System.out.println("✓ Minimum gewijzigd!");
+                    product.setMinimumVoorraad(leesInt("  Nieuw minimum: "));
+                    break;
+                case 4:
+                    product.setPrijs(leesDouble("  Nieuwe prijs (€): "));
                     break;
                 default:
-                    System.out.println("❌ Ongeldige keuze!");
+                    toonFout("Ongeldige keuze.");
+                    return;
+            }
+            opslaan();
+            toonSucces("Wijziging opgeslagen.");
+            if (product.isLageVoorraad()) {
+                toonLageVoorraadWaarschuwing(product);
             }
         } catch (IllegalArgumentException e) {
-            System.out.println("❌ " + e.getMessage());
+            toonFout(e.getMessage());
         }
     }
 
     // ──────────────────────────────────────────────
-    //  5. Verwijderen (NIEUW)
+    //  7. Verwijderen
     // ──────────────────────────────────────────────
 
     private static void verwijderProduct() {
-        System.out.print("Voer artikelnummer in van het te verwijderen product: ");
+        drukSchermTitel("PRODUCT VERWIJDEREN");
+        System.out.print("  Artikelnummer: ");
         String artikelNummer = scanner.nextLine().trim();
 
         Product product = service.zoekProduct(artikelNummer);
         if (product == null) {
-            System.out.println("❌ Product niet gevonden!");
+            toonFout("Artikel niet gevonden: " + artikelNummer);
             return;
         }
+        toonProductKaart(product);
 
-        System.out.println("Product gevonden: " + product.getNaam()
-                + " (voorraad: " + product.getVoorraad() + ")");
-        System.out.print("Weet u zeker dat u dit product wilt verwijderen? (j/n): ");
+        System.out.print("  Bevestig verwijdering (j/n): ");
         String bevestiging = scanner.nextLine().trim().toLowerCase();
 
         if (bevestiging.equals("j")) {
             service.verwijderProduct(artikelNummer);
-            System.out.println("✓ Product '" + product.getNaam() + "' is verwijderd.");
+            opslaan();
+            toonSucces("Product \"" + product.getNaam() + "\" is verwijderd uit het systeem.");
         } else {
-            System.out.println("Verwijdering geannuleerd.");
+            toonMelding("INFO", "Verwijdering geannuleerd.");
         }
     }
 
     // ──────────────────────────────────────────────
-    //  6. Lage voorraad controleren
+    //  8. Lage voorraad controleren
     // ──────────────────────────────────────────────
 
     private static void checkLageVoorraad() {
-        System.out.println("\n=== PRODUCTEN MET LAGE VOORRAAD ===");
-
         List<Product> lageLevels = service.getProductenMetLageVoorraad();
+        drukSchermTitel("LAGE VOORRAAD — " + lageLevels.size() + " alert(s)");
+
         if (lageLevels.isEmpty()) {
-            System.out.println("✓ Alle producten hebben voldoende voorraad!");
+            toonSucces("Alle producten hebben voldoende voorraad.");
             return;
         }
 
-        System.out.println("─".repeat(80));
-        System.out.printf("%-15s %-20s %-12s %-12s %-15s%n",
-                "Artikelnummer", "Naam", "Voorraad", "Minimum", "Tekort");
-        System.out.println("─".repeat(80));
-
-        for (Product product : lageLevels) {
-            System.out.printf("%-15s %-20s %-12d %-12d %-15d%n",
-                    product.getArtikelNummer(),
-                    product.getNaam(),
-                    product.getVoorraad(),
-                    product.getMinimumVoorraad(),
-                    product.getTekort());
+        System.out.println("╔" + LIJN_H + "╗");
+        System.out.printf("║  %-14s %-22s %-10s %-10s %-10s %-10s  ║%n",
+                "Artikelnummer", "Naam", "Voorraad", "Minimum", "Tekort", "Waarde");
+        System.out.println("╠" + LIJN_H + "╣");
+        for (Product p : lageLevels) {
+            System.out.printf("║  %-14s %-22s %-10d %-10d %-10d %-10s  ║%n",
+                    p.getArtikelNummer(),
+                    afkappen(p.getNaam(), 22),
+                    p.getVoorraad(),
+                    p.getMinimumVoorraad(),
+                    p.getTekort(),
+                    String.format("€ %.2f", p.getVoorraadWaarde()));
         }
-        printLijn();
+        System.out.println("╚" + LIJN_H + "╝");
     }
 
     // ──────────────────────────────────────────────
-    //  Hulpmethodes
+    //  Opslaan
     // ──────────────────────────────────────────────
 
-    /**
-     * Toont een waarschuwingsmelding wanneer de voorraad onder het minimum zakt.
-     */
-    private static void toonLageVoorraadMelding(Product product) {
-        System.out.println("\n" + "⚠️".repeat(20));
-        System.out.println("🚨 WAARSCHUWING: LAGE VOORRAAD GEDETECTEERD!");
-        System.out.println("⚠️".repeat(20));
-        System.out.println("Product: " + product.getNaam());
-        System.out.println("Artikelnummer: " + product.getArtikelNummer());
-        System.out.println("Huidige voorraad: " + product.getVoorraad() + " stuks");
-        System.out.println("Minimale voorraad: " + product.getMinimumVoorraad() + " stuks");
-        System.out.println("Tekort: " + product.getTekort() + " stuks");
-        System.out.println("⚠️".repeat(20) + "\n");
+    private static void opslaan() {
+        try {
+            service.slaanOp();
+        } catch (IOException e) {
+            toonFout("Kon data niet opslaan: " + e.getMessage());
+        }
     }
 
-    private static void printTabelHeader() {
-        printLijn();
-        System.out.printf("%-15s %-20s %-12s %-12s %-10s%n",
-                "Artikelnummer", "Naam", "Voorraad", "Minimum", "Status");
-        printLijn();
+    // ──────────────────────────────────────────────
+    //  UI-hulpmethodes
+    // ──────────────────────────────────────────────
+
+    private static void toonProductTabelHeader() {
+        System.out.println("╔" + LIJN_H + "╗");
+        System.out.printf("║  %-14s %-22s %-10s %-10s %-10s %-10s  ║%n",
+                "Artikelnummer", "Naam", "Voorraad", "Minimum", "Prijs", "Status");
+        System.out.println("╠" + LIJN_H + "╣");
     }
 
-    private static void printLijn() {
-        System.out.println("─".repeat(80));
+    private static void toonProductRegel(Product p) {
+        String status = p.isLageVoorraad() ? "! LAAG" : "OK";
+        System.out.printf("║  %-14s %-22s %-10d %-10d %-10s %-10s  ║%n",
+                p.getArtikelNummer(),
+                afkappen(p.getNaam(), 22),
+                p.getVoorraad(),
+                p.getMinimumVoorraad(),
+                String.format("€ %.2f", p.getPrijs()),
+                status);
+    }
+
+    private static void toonProductKaart(Product p) {
+        System.out.println("  " + LIJN_M);
+        System.out.printf("  %-20s %s%n",  "Artikelnummer:",  p.getArtikelNummer());
+        System.out.printf("  %-20s %s%n",  "Naam:",           p.getNaam());
+        System.out.printf("  %-20s %d stuks%n", "Voorraad:",  p.getVoorraad());
+        System.out.printf("  %-20s %d stuks%n", "Minimum:",   p.getMinimumVoorraad());
+        System.out.printf("  %-20s € %.2f%n",   "Stukprijs:", p.getPrijs());
+        System.out.printf("  %-20s € %.2f%n",   "Voorraadwaarde:", p.getVoorraadWaarde());
+        System.out.println("  " + LIJN_M);
+    }
+
+    private static void toonLageVoorraadWaarschuwing(Product p) {
+        System.out.println();
+        System.out.println("  ┌─ ! LAGE VOORRAAD WAARSCHUWING " + "─".repeat(48) + "┐");
+        System.out.printf("  │  %-76s  │%n", "Product  : " + p.getNaam() + " (" + p.getArtikelNummer() + ")");
+        System.out.printf("  │  %-76s  │%n",
+                "Voorraad : " + p.getVoorraad() + " stuks  |  Minimum: " + p.getMinimumVoorraad()
+                        + " stuks  |  Tekort: " + p.getTekort() + " stuks");
+        System.out.println("  └" + "─".repeat(80) + "┘");
+    }
+
+    private static void drukSchermTitel(String titel) {
+        System.out.println("┌" + LIJN_M + "┐");
+        System.out.printf("│  %-78s  │%n", "  " + titel);
+        System.out.println("└" + LIJN_M + "┘");
+    }
+
+    private static void toonSucces(String bericht) {
+        System.out.println("  [ OK ]  " + bericht);
+    }
+
+    private static void toonFout(String bericht) {
+        System.out.println("  [FOUT]  " + bericht);
+    }
+
+    private static void toonMelding(String type, String bericht) {
+        System.out.println("  [" + type + "]  " + bericht);
+    }
+
+    private static void drukKader(String tekst, boolean dubbel) {
+        String h = dubbel ? "═" : "─";
+        String l = h.repeat(BREEDTE);
+        System.out.println((dubbel ? "╔" : "┌") + l + (dubbel ? "╗" : "┐"));
+        System.out.printf((dubbel ? "║" : "│") + "  %-78s  " + (dubbel ? "║" : "│") + "%n", tekst);
+        System.out.println((dubbel ? "╚" : "└") + l + (dubbel ? "╝" : "┘"));
+    }
+
+    private static void drukCenteredRegel(String tekst, boolean bold) {
+        int ruimte = BREEDTE - tekst.length();
+        int links  = ruimte / 2;
+        int rechts = ruimte - links;
+        String gevuld = " ".repeat(links) + tekst + " ".repeat(rechts);
+        System.out.println("║" + gevuld + "║");
+    }
+
+    private static void drukMenuOptie(String nummer, String omschrijving) {
+        System.out.printf("║    [%s]  %-73s║%n", nummer, omschrijving);
+    }
+
+    private static String afkappen(String tekst, int maxLengte) {
+        if (tekst == null) return "";
+        return tekst.length() <= maxLengte ? tekst : tekst.substring(0, maxLengte - 1) + "…";
+    }
+
+    // ──────────────────────────────────────────────
+    //  Input-helpers
+    // ──────────────────────────────────────────────
+
+    private static int leesInt(String prompt) {
+        while (true) {
+            System.out.print(prompt);
+            String invoer = scanner.nextLine().trim().replace(",", ".");
+            try {
+                return Integer.parseInt(invoer);
+            } catch (NumberFormatException e) {
+                toonFout("Voer een geldig geheel getal in.");
+            }
+        }
+    }
+
+    private static double leesDouble(String prompt) {
+        while (true) {
+            System.out.print(prompt);
+            String invoer = scanner.nextLine().trim().replace(",", ".");
+            try {
+                return Double.parseDouble(invoer);
+            } catch (NumberFormatException e) {
+                toonFout("Voer een geldig decimaal getal in (bijv. 9.99).");
+            }
+        }
     }
 }

@@ -2,13 +2,14 @@ package voorraadBeheer;
 
 /**
  * Representeert een product in het voorraadbeheersysteem.
- * Bevat alle gegevens over een artikel: naam, artikelnummer, voorraad en minimumvoorraad.
+ * Bevat alle gegevens over een artikel: naam, artikelnummer, voorraad, minimumvoorraad en prijs.
  */
 public class Product {
     private String naam;
     private String artikelNummer;
     private int voorraad;
     private int minimumVoorraad;
+    private double prijs;
 
     /**
      * Constructor voor een nieuw Product.
@@ -17,19 +18,24 @@ public class Product {
      * @param artikelNummer    Het unieke artikelnummer
      * @param voorraad         De huidige hoeveelheid in voorraad
      * @param minimumVoorraad  De minimaal vereiste hoeveelheid in voorraad
-     * @throws IllegalArgumentException als voorraad of minimumVoorraad negatief is
+     * @param prijs            De stukprijs van het product (mag niet negatief zijn)
+     * @throws IllegalArgumentException als voorraad, minimumVoorraad of prijs negatief is
      */
-    public Product(String naam, String artikelNummer, int voorraad, int minimumVoorraad) {
+    public Product(String naam, String artikelNummer, int voorraad, int minimumVoorraad, double prijs) {
         if (voorraad < 0) {
             throw new IllegalArgumentException("Voorraad kan niet negatief zijn.");
         }
         if (minimumVoorraad < 0) {
             throw new IllegalArgumentException("Minimum voorraad kan niet negatief zijn.");
         }
+        if (prijs < 0) {
+            throw new IllegalArgumentException("Prijs kan niet negatief zijn.");
+        }
         this.naam = naam;
         this.artikelNummer = artikelNummer;
         this.voorraad = voorraad;
         this.minimumVoorraad = minimumVoorraad;
+        this.prijs = prijs;
     }
 
     // --- Getters ---
@@ -54,6 +60,16 @@ public class Product {
         return minimumVoorraad;
     }
 
+    /** @return De stukprijs van het product */
+    public double getPrijs() {
+        return prijs;
+    }
+
+    /** @return De totale waarde van de voorraad (voorraad * prijs) */
+    public double getVoorraadWaarde() {
+        return voorraad * prijs;
+    }
+
     // --- Setters ---
 
     /** @param naam De nieuwe naam van het product */
@@ -64,6 +80,19 @@ public class Product {
     /** @param artikelNummer Het nieuwe artikelnummer */
     public void setArtikelNummer(String artikelNummer) {
         this.artikelNummer = artikelNummer;
+    }
+
+    /**
+     * Stelt de stukprijs in.
+     *
+     * @param prijs De nieuwe prijs (mag niet negatief zijn)
+     * @throws IllegalArgumentException als de waarde negatief is
+     */
+    public void setPrijs(double prijs) {
+        if (prijs < 0) {
+            throw new IllegalArgumentException("Prijs kan niet negatief zijn.");
+        }
+        this.prijs = prijs;
     }
 
     /**
@@ -114,7 +143,7 @@ public class Product {
 
     @Override
     public String toString() {
-        return String.format("Product{artikelNummer='%s', naam='%s', voorraad=%d, minimum=%d}",
-                artikelNummer, naam, voorraad, minimumVoorraad);
+        return String.format("Product{artikelNummer='%s', naam='%s', voorraad=%d, minimum=%d, prijs=%.2f}",
+                artikelNummer, naam, voorraad, minimumVoorraad, prijs);
     }
 }
