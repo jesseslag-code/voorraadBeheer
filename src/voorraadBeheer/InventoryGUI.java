@@ -6,6 +6,12 @@ import javax.swing.table.DefaultTableCellRenderer;
 import javax.swing.table.DefaultTableModel;
 import java.awt.*;
 import java.awt.event.ActionEvent;
+import java.io.BufferedWriter;
+import java.io.FileWriter;
+import java.io.IOException;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.util.List;
 
 /**
  * Hoofdvenster van het voorraadbeheer GUI.
@@ -26,6 +32,20 @@ public class InventoryGUI extends JFrame {
 
     /** Bestandsnaam voor CSV-persistentie. */
     private static final String CSV_BESTAND = "voorraad.csv";
+
+    /** Datumopmaak voor weergave in het nabestelrapport. */
+    private static final DateTimeFormatter RAPPORT_DATUM_OPMAAK =
+            DateTimeFormatter.ofPattern("dd-MM-yyyy HH:mm");
+
+    /** Datumopmaak voor de bestandsnaam van het nabestelrapport. */
+    private static final DateTimeFormatter BESTAND_DATUM_OPMAAK =
+            DateTimeFormatter.ofPattern("yyyyMMdd_HHmm");
+
+    /** Maximale breedte (tekens) van een productnaam in het nabestelrapport. */
+    private static final int MAX_NAAM_BREEDTE = 22;
+
+    /** Aantal tekens waarop een te lange productnaam wordt afgekapt. */
+    private static final int TRUNCATE_NAAM_OP = 19;
 
     /** Kolomnamen van de tabel. */
     private static final String[] KOLOMMEN = {
@@ -198,12 +218,14 @@ public class InventoryGUI extends JFrame {
 
         // ── Knoppen ──────────────────────────────────────────────────────────
         JPanel knoppenPanel = new JPanel(new FlowLayout(FlowLayout.CENTER, 8, 8));
-        knoppenPanel.add(maakKnop("Toevoegen",     this::actieToevoegen));
-        knoppenPanel.add(maakKnop("Verwijderen",   this::actieVerwijderen));
-        knoppenPanel.add(maakKnop("Bijwerken",     this::actieBijwerken));
-        knoppenPanel.add(maakKnop("Inboeken (+)",  this::actieInboeken));
-        knoppenPanel.add(maakKnop("Uitboeken (-)", this::actieUitboeken));
-        knoppenPanel.add(maakKnop("Leegmaken",     e -> veldenLeegmaken()));
+        knoppenPanel.add(maakKnop("Toevoegen",              this::actieToevoegen));
+        knoppenPanel.add(maakKnop("Verwijderen",            this::actieVerwijderen));
+        knoppenPanel.add(maakKnop("Bijwerken",              this::actieBijwerken));
+        knoppenPanel.add(maakKnop("Inboeken (+)",           this::actieInboeken));
+        knoppenPanel.add(maakKnop("Uitboeken (-)",          this::actieUitboeken));
+        knoppenPanel.add(maakKnop("Nabestelrapport",        this::actieNabestelrapport));
+        knoppenPanel.add(maakKnop("Automatisch aanvullen",  this::actieAutomatischAanvullen));
+        knoppenPanel.add(maakKnop("Leegmaken",              e -> veldenLeegmaken()));
         panel.add(knoppenPanel, BorderLayout.CENTER);
 
         // ── Totale voorraadwaarde ─────────────────────────────────────────────
@@ -455,6 +477,117 @@ public class InventoryGUI extends JFrame {
             toonFout("Voer een geldig geheel getal in.");
         } catch (IllegalArgumentException ex) {
             toonFout(ex.getMessage());
+        }
+    }
+
+    // ─── Automatiseringsacties ────────────────────────────────────────────────
+
+    /**
+     * Genereert een nabestelrapport van alle producten met lage voorraad.
+     * Toont het rapport in een dialoog en slaat het op als een .txt-bestand.
+     */
+    private void actieNabestelrapport(ActionEvent e) {
+        List<InventoryService.NabestelItem> nabestelLijst = service.getNabestelLijst();
+
+        if (nabestelLijst.isEmpty()) {
+            JOptionPane.showMessageDialog(this,
+                    "Alle producten hebben voldoende voorraad. Er hoeft niets besteld te worden.",
+                    "Nabestelrapport", JOptionPane.INFORMATION_MESSAGE);
+            return;
+        }
+
+        String tijdstip = LocalDateTime.now().format(RAPPORT_DATUM_OPMAAK);
+        StringBuilder rapport = new StringBuilder();
+        rapport.append("=== NABESTELRAPPORT ===\n");
+        rapport.append("Gegenereerd op: ").append(tijdstip).append("\n");
+        rapport.append("─".repeat(55)).append("\n");
+        rapport.append(String.format("%-10s %-22s %8s %8s %8s%n",
+                "ArtNr", "Naam", "Voorraad", "Minimum", "Bestellen"));
+        rapport.append("─".repeat(55)).append("\n");
+
+        for (InventoryService.NabestelItem item : nabestelLijst) {
+            Product p        = item.getProduct();
+            int bestelAantal = item.getBestelAantal();
+            String naamKolom = p.getNaam().length() > MAX_NAAM_BREEDTE
+                    ? p.getNaam().substring(0, TRUNCATE_NAAM_OP) + "..."
+                    : p.getNaam();
+            rapport.append(String.format("%-10s %-22s %8d %8d %8d%n",
+                    p.getArtikelNummer(),
+                    naamKolom,
+                    p.getVoorraad(),
+                    p.getMinimumVoorraad(),
+                    bestelAantal));
+        }
+
+        rapport.append("─".repeat(55)).append("\n");
+        rapport.append("Totaal te bestellen producten: ").append(nabestelLijst.size()).append("\n");
+
+        // Toon in een dialoog
+        JTextArea tekstGebied = new JTextArea(rapport.toString());
+        tekstGebied.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 13));
+        tekstGebied.setEditable(false);
+        JScrollPane scrollPane = new JScrollPane(tekstGebied);
+        scrollPane.setPreferredSize(new Dimension(540, 260));
+
+        int keuze = JOptionPane.showOptionDialog(this,
+                scrollPane,
+                "Nabestelrapport",
+                JOptionPane.YES_NO_OPTION,
+                JOptionPane.PLAIN_MESSAGE,
+                null,
+                new String[]{"Opslaan als .txt", "Sluiten"},
+                "Sluiten");
+
+        if (keuze == JOptionPane.YES_OPTION) {
+            String bestandsNaam = "nabestelrapport_"
+                    + LocalDateTime.now().format(BESTAND_DATUM_OPMAAK)
+                    + ".txt";
+            try (BufferedWriter writer = new BufferedWriter(new FileWriter(bestandsNaam))) {
+                writer.write(rapport.toString());
+                toonSucces("Rapport opgeslagen als: " + bestandsNaam);
+            } catch (IOException ex) {
+                toonFout("Kon rapport niet opslaan: " + ex.getMessage());
+            }
+        }
+    }
+
+    /**
+     * Vult automatisch alle producten met lage voorraad aan tot hun minimumvoorraad.
+     * Vraagt eerst om bevestiging en toont daarna een samenvatting.
+     */
+    private void actieAutomatischAanvullen(ActionEvent e) {
+        List<InventoryService.NabestelItem> nabestelLijst = service.getNabestelLijst();
+
+        if (nabestelLijst.isEmpty()) {
+            JOptionPane.showMessageDialog(this,
+                    "Alle producten hebben voldoende voorraad. Er is niets bij te vullen.",
+                    "Automatisch aanvullen", JOptionPane.INFORMATION_MESSAGE);
+            return;
+        }
+
+        // Bouw een overzicht op van wat er aangevuld wordt
+        StringBuilder overzicht = new StringBuilder(
+                "De volgende producten worden aangevuld tot hun minimumvoorraad:\n\n");
+        for (InventoryService.NabestelItem item : nabestelLijst) {
+            Product p        = item.getProduct();
+            int bestelAantal = item.getBestelAantal();
+            overzicht.append(String.format("  • %s (%s): +%d stuks → %d stuks%n",
+                    p.getNaam(), p.getArtikelNummer(),
+                    bestelAantal, p.getMinimumVoorraad()));
+        }
+        overzicht.append("\nWilt u doorgaan?");
+
+        int bevestiging = JOptionPane.showConfirmDialog(this,
+                overzicht.toString(),
+                "Automatisch aanvullen bevestigen",
+                JOptionPane.YES_NO_OPTION,
+                JOptionPane.QUESTION_MESSAGE);
+
+        if (bevestiging == JOptionPane.YES_OPTION) {
+            List<Product> aangevuld = service.vulAutomatischAan();
+            service.slaCSVOp(CSV_BESTAND);
+            verversTable();
+            toonSucces(aangevuld.size() + " product(en) zijn automatisch aangevuld tot minimumvoorraad.");
         }
     }
 

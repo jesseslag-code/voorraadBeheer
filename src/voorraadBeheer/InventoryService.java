@@ -223,6 +223,58 @@ public class InventoryService {
     }
 
     /**
+     * Geeft een lijst van producten met lage voorraad inclusief het benodigde bestelantal
+     * om het minimum te bereiken.
+     *
+     * @return Lijst van {@link NabestelItem} voor elk product met een tekort
+     */
+    public List<NabestelItem> getNabestelLijst() {
+        List<NabestelItem> lijst = new ArrayList<>();
+        for (Product product : producten) {
+            if (product.isLageVoorraad()) {
+                lijst.add(new NabestelItem(product, product.getTekort()));
+            }
+        }
+        return lijst;
+    }
+
+    /**
+     * Vult alle producten met lage voorraad automatisch aan tot hun minimumvoorraad.
+     *
+     * @return Lijst van bijgewerkte producten
+     */
+    public List<Product> vulAutomatischAan() {
+        List<Product> aangevuld = new ArrayList<>();
+        for (Product product : producten) {
+            if (product.isLageVoorraad()) {
+                int tekort = product.getTekort();
+                product.setVoorraad(product.getVoorraad() + tekort);
+                aangevuld.add(product);
+            }
+        }
+        return aangevuld;
+    }
+
+    /**
+     * Onveranderlijk datakoppel dat een product combineert met het benodigde bestelantal.
+     */
+    public static class NabestelItem {
+        private final Product product;
+        private final int bestelAantal;
+
+        public NabestelItem(Product product, int bestelAantal) {
+            this.product     = product;
+            this.bestelAantal = bestelAantal;
+        }
+
+        /** @return Het product met lage voorraad */
+        public Product getProduct() { return product; }
+
+        /** @return Aantal stuks dat besteld moet worden om het minimum te bereiken */
+        public int getBestelAantal() { return bestelAantal; }
+    }
+
+    /**
      * Laadt voorbeelddata in het systeem.
      */
     public void laadVoorbeeldData() {
